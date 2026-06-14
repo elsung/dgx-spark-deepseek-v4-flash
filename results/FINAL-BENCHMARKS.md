@@ -26,14 +26,15 @@ Ranked by decode tok/s. **MoE dominates** a bandwidth-bound box.
 284B/13B-active, ~149 GB across both nodes, RoCE over QSFP, MTP draft=2, fp8 KV, 1M ctx.
 
 **Single-stream:** ~38.5 tok/s (vLLM metric) · 42–44 tok/s end-to-end · MTP accept-len 2.0–2.3
-**Concurrency (max_num_seqs=6):**
+**Aggregate throughput (concurrency):**
 
-| N | aggregate tok/s | per-stream |
-|--:|--:|--:|
-| 1 | 32.2 | 32.2 |
-| 2 | 49.0 | 24.5 |
-| 4 | 44.7 | 11.2 |
-| 6 | 66.0 | 11.0 |
+| Profile | peak agg tok/s | bound by |
+|---|--:|---|
+| 1M ctx, 6 slots | ~103 (c≈6) | slot count |
+| **32K ctx, 36 slots** | **~270 (c≈32)** | **GPU compute (95% util both nodes)** |
+
+~270 tok/s aggregate = ~7× single-stream; compute-bound (not memory — KV only ~7% used). See
+`dual-spark-vllm.md` for the full sweeps. Profile switchable via `.env` (`MAX_MODEL_LEN`/`MAX_NUM_SEQS`).
 
 ## Takeaways
 1. **Decode is memory-bandwidth bound** — small dense models run ~2.5–3.4× slower than a 16 GB GDDR7
