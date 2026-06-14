@@ -42,3 +42,15 @@ Same depth ramp on each box. ds4.c boxes (Mac, RTX PRO 6000) measured at their o
 **The dual Spark's edge GROWS with context:** ~6× faster TTFT at 100k (52 s vs 5–6 min on the ds4.c boxes),
 and decode stays flat (~40) where ds4.c decode sags ~20–30%. vLLM FP8 + V4 sparse-attention kernels ≫ ds4.c
 at depth. (TTFT is still real on every box — a 100k prompt is never instant.)
+
+## Stress & stability (monitored; watchdog auto-aborts if free RAM < 4 GB)
+| test | result | mem low-water | NVRM-OOM Δ | crash? |
+|---|---|--:|--:|---|
+| concurrent 4 × 150k (`base`) | stable, completed | 12.0 GB | 0 | no |
+| 500k single-stream (`base`) | TTFT 351 s, prefill 1379, **decode 31.9** | 11.5 GB | 0 | no |
+
+**Key memory insight:** the KV pool is **pre-allocated** at startup (`gpu_memory_utilization=0.82` reserves
+~105 GB), so workload (concurrency / context depth) **fills the GPU pool but does NOT spike system RAM** —
+free RAM stays ~11–15 GB regardless. So crash risk ≈ a *constant baseline* (the 0.82 reservation) + the
+`mstflint`/NIC kernel bug, **not** the workload. (500k at 36 slots *would* OOM — pool = ctx×slots = 18M
+tokens; 500k *single* on `base`'s 6M pool fits fine.)
