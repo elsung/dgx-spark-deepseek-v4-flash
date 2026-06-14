@@ -46,7 +46,7 @@ slot count. See `dual-spark-vllm.md`. Profiles switch via `.env` (`MAX_MODEL_LEN
 | Mac Studio M2 Ultra | 192 GB (~800 GB/s) | ds4.c | 29.7 | 389 | single only |
 | Single DGX Spark | 128 GB (~273 GB/s) | ds4.c IQ2 | ~14 | — | single |
 
-Single-stream decode tracks memory bandwidth (RTX 6000 wins). But the dual Spark runs the full **FP8**
+Single-stream decode tracks memory bandwidth (RTX PRO 6000 wins). But the dual Spark runs the full **FP8**
 (best quality), has **~5× the prefill throughput** (vLLM batched, ~1785 vs ~350), and does real
 **multi-stream throughput (~350 agg)** — the ds4.c boxes are single-stream. Full breakdown in `cross-machine.md`.
 

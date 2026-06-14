@@ -30,3 +30,15 @@ need the mitigations (compaction off, headroom) + monitoring.
 - Sustained/continuous (30–60 min) — throughput decay? memory creep? stability?
 - Cross-box: RTX PRO 6000 (≤131k), Mac M2 Ultra (≤1M).
 - → ideal settings per use case.
+
+## Long-context across machines (single-stream)
+Same depth ramp on each box. ds4.c boxes (Mac, RTX PRO 6000) measured at their own depths.
+| Machine | engine | TTFT @100k | prefill t/s (8k→100k) | decode t/s (8k→100k) |
+|---|---|--:|--:|--:|
+| **Dual DGX Spark** | vLLM **FP8** | **52 s** | ~1974 → ~1901 | ~40 → ~40 |
+| RTX PRO 6000 | ds4.c | 349 s | ~317 → ~286 | ~30 → ~26 |
+| Mac M2 Ultra | ds4.c | 315 s | ~395 → ~317 | ~24 → ~20 |
+
+**The dual Spark's edge GROWS with context:** ~6× faster TTFT at 100k (52 s vs 5–6 min on the ds4.c boxes),
+and decode stays flat (~40) where ds4.c decode sags ~20–30%. vLLM FP8 + V4 sparse-attention kernels ≫ ds4.c
+at depth. (TTFT is still real on every box — a 100k prompt is never instant.)

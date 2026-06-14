@@ -14,7 +14,7 @@ median of iters; decode = completion_tokens/wall, prefill = prompt_tokens/wall o
 ¹ antirez ds4.c is single-stream (concurrent requests queue).
 
 ## Reading it
-- **Single-stream ≈ memory bandwidth.** RTX 6000 (fat GDDR7) leads at 47; M2 Ultra at 30; a single Spark's
+- **Single-stream ≈ memory bandwidth.** RTX PRO 6000 (fat GDDR7) leads at 47; M2 Ultra at 30; a single Spark's
   273 GB/s puts it last on raw latency. The dual Spark lands at ~40 — TP=2 over the 200G link roughly
   **3× a single Spark** and past the Mac.
 - **Two axes the table doesn't fully show:**
@@ -23,5 +23,5 @@ median of iters; decode = completion_tokens/wall, prefill = prompt_tokens/wall o
   - **Serving throughput:** the ds4.c boxes are single-stream; the dual-Spark vLLM does **~270 tok/s
     aggregate** at concurrency. For multi-user / agentic serving the Spark pair is in a different class.
 
-**Takeaway:** for one fast chat, the RTX 6000 wins. For **highest-quality V4-Flash and real multi-stream
+**Takeaway:** for one fast chat, the RTX PRO 6000 wins. For **highest-quality V4-Flash and real multi-stream
 throughput on hardware you can buy two of**, the dual DGX Spark is the pick.
