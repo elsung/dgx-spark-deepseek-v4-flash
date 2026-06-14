@@ -71,3 +71,14 @@ Fixes:
   (stops the background daemon that locked up — on-demand compaction still works, no perf loss),
   `drop_caches` after big downloads, and optionally lower vLLM `gpu_memory_utilization`.
 - High-context × high-concurrency profiles (e.g. 500K) raise memory pressure — apply the above + watch `free`.
+
+## 8. NCCL "unhandled system error" on dual-node bringup = RoCE GID index mismatch
+After a re-link, vLLM TP=2 failed: `ncclCommInitRank` → `ibv_modify_qp failed ... local GID index 3,
+local GID :: (empty)`. **Not** memory, **not** MTU. The recipe hardcodes `NCCL_IB_GID_INDEX=3` (the RoCEv2
+IPv4 GID slot), but the worker's GID table had a **gap** (IPv4 RoCEv2 landed at index 4, index 3 empty) —
+leftover cruft from re-assigning the link IP across ports during cabling debug, on a node that hadn't
+rebooted since. The head (freshly rebooted) had it at index 3.
+Diagnose: `for i in 0..5; do cat /sys/class/infiniband/<rocedev>/ports/1/gids/$i; .../gid_attrs/types/$i; done`
+— find the index whose GID = `::ffff:<your-ipv4>` AND type = `RoCE v2`.
+Fix: made `NCCL_IB_GID_INDEX` env-driven per node (head=3, worker=4). A clean reboot rebuilds the GID table
+without the gap (then both = 3). Set per-node in each node's `.env`.
