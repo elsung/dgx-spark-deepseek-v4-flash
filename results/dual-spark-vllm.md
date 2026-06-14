@@ -16,15 +16,22 @@ vLLM 0.21.1 (Aiden image), TP=2, MTP draft=2, fp8 KV, expert-parallel.
 |---|--:|--:|--:|--:|--:|--:|
 | agg tok/s | 32 | 59 | 66 | **103** | 96 | 110 |
 
-**High-throughput profile (32K ctx, max_num_seqs=36)** — compute-limited:
+**High-throughput, 32K ctx, max_num_seqs=36:**
 | c | 1 | 8 | 16 | 24 | 32 | 36 |
 |---|--:|--:|--:|--:|--:|--:|
-| agg tok/s | 36 | 130 | 180 | 233 | **270** | 193 |
+| agg tok/s | 36 | 130 | 180 | 233 | 270 | 193 |
 
-- **Peak ~270 tok/s aggregate** (vLLM server metric confirms 265–275 t/s at 32 running reqs),
-  ~7× single-stream. **Compute-bound: both GB10s at 95–96% GPU util** at c=32 — the ceiling,
-  not a memory limit (**KV cache only ~7% used** at 36 seqs/32K ctx — lots of context headroom).
-- Profiles switch via `.env`: `MAX_MODEL_LEN` + `MAX_NUM_SEQS` (compose defaults 32768/36).
-  KV is so cheap (V4 compressed attention) you can run ~256K ctx at 36 slots and still fit.
+**Sweet spot — 256K ctx, max_num_seqs=36** (single-stream decode 41 t/s, prefill ~1785 t/s):
+| c | 1 | 8 | 16 | 24 | 32 |
+|---|--:|--:|--:|--:|--:|
+| agg tok/s | 39 | 143 | 195 | 289 | **351** |
+
+- **Peak ~350 tok/s aggregate** at 256K ctx, c=32 (vLLM metric ~345 sustained) — *higher* than the 32K
+  profile and with 8× the context. ~8.5× single-stream. The `vm.compaction_proactiveness=0` mitigation
+  (added after the kernel crash, see SETUP-NOTES §7) appears to have lifted throughput too.
+- **256K/36 is the memory edge**, though: ~15 GB system RAM free, 1 NVRM-OOM event logged (recovered).
+  KV cache itself is only ~6% used (short requests), but the KV *pool* pre-allocation (`ctx×slots`) is what
+  eats memory. **500K at 36 slots OOMs** — for >256K, drop `MAX_NUM_SEQS` (trade concurrency for context).
+- Profiles switch via `.env`: `MAX_MODEL_LEN` + `MAX_NUM_SEQS`. Recommended default: **256K / 36**.
 
 Measure it yourself: `mytoolz dsv4-bench --n 1 --n 8 --n 24 --n 32`

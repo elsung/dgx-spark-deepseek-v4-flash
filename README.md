@@ -15,13 +15,14 @@ and [blackwell-llm-toolkit](https://github.com/elsung/blackwell-llm-toolkit), po
 ## 🏁 Headline results
 | Setup | Model / quant | single-stream | aggregate |
 |---|---|--:|--:|
-| **2× DGX Spark, TP=2 (vLLM)** | DeepSeek-V4-Flash **official FP8** | **~38–44 tok/s** | **~270 tok/s @ c=32** |
+| **2× DGX Spark, TP=2 (vLLM)** | DeepSeek-V4-Flash **official FP8** | **~41 tok/s** | **~350 tok/s @ c=32 (256K ctx)** |
 | 1× DGX Spark (antirez ds4) | DeepSeek-V4-Flash IQ2_XXS | ~14 tok/s | — |
 | 1× DGX Spark (llama.cpp GGUF suite) | 9B → **172B** MoE | up to 67 (35B-A3B) | — |
 
 **Cross-machine, same model (single-stream decode / prefill tok/s):** RTX PRO 6000 **46.9 / 344** ·
-Mac M2 Ultra **29.7 / 389** · dual Spark FP8 **~40** · single Spark IQ2 ~14. Only the Sparks run the
-**full FP8** quality *and* real **multi-stream throughput (~270 agg)** — the ds4.c boxes are single-stream.
+Mac M2 Ultra **29.7 / 389** · dual Spark FP8 **~41 / ~1785** · single Spark IQ2 ~14. Only the Sparks run the
+**full FP8** quality, have **~5× the prefill**, *and* do real **multi-stream throughput (~350 agg)** —
+the ds4.c boxes are single-stream.
 
 Full numbers: [`results/FINAL-BENCHMARKS.md`](results/FINAL-BENCHMARKS.md) ·
 [`cross-machine.md`](results/cross-machine.md) · [`dual-spark-vllm.md`](results/dual-spark-vllm.md) ·
