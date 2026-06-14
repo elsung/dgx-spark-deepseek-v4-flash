@@ -58,3 +58,26 @@ tokens; 500k *single* on `base`'s 6M pool fits fine.)
 ## Sustained / continuous (15 min, base 1M/6, gen=256, sequential)
 140 requests over 15 min: **decode stayed 39.6 → 40.2 t/s (no decay)**, **free RAM 11589 → 11576 MB
 (no creep)**, **0 new NVRM-OOM**, no crash. Continuous running does not degrade throughput or leak memory.
+
+## Concurrent long-context at the edge (batch 256K/36)
+8 concurrent × ~200k context (1.55M tokens prefilled): wall **876 s**, aggregate prefill **~1765 t/s**,
+**stable** (13 GB low-water, 0 NVRM-OOM, no crash, KV pool ~13% used). **Concurrent big-context is
+prefill-bound** — the prompts dominate wall time; decode is fast once prefilled. (Pool didn't fill — 36×250k
+would, but stability is already established; the pre-allocated pool means system RAM is untouched regardless.)
+
+## Ideal settings per use case (dual DGX Spark, DeepSeek-V4-Flash FP8)
+| Use case | Profile (`mytoolz dsv4-up …`) | Why |
+|---|---|---|
+| **Interactive chat / agents, 1–2 users** | **`base` (1M / 6)** | ~40 tok/s per request, up to 1M context, stable. The everyday default. |
+| **Long doc / whole-codebase, single big context** | **`base` (1M / 6)** | decode holds ~32–40 even at 200k–500k; the cost is TTFT (200k≈2 min, 500k≈6 min to first token). |
+| **Batch / many concurrent agents / evals (short–mid ctx)** | **`batch` (256K / 36)** | ~350 tok/s aggregate; ~12 tok/s per request. |
+| **Max raw throughput, short context** | **`fast` (32K / 36)** | ~270–350 aggregate. |
+| **Avoid** | `ctx × slots ≳ 9M tokens` (e.g. 500K/36) | KV pool OOM on cold start. For >256k, drop slots. |
+
+**Rules of thumb:**
+- **Prefill ~linear (~1900 t/s), but TTFT grows** — keep interactive prompts under ~100k for <1-min TTFT.
+- **Decode barely drops with depth** (~40 → ~32 at 500k) — long context slows *time-to-first-token*, not generation.
+- **Per-request 40+ tok/s ⇒ single-stream only** (compute-bound ~350 t/s total; per-req ≈ total ÷ active).
+- **Everything tested was stable** — 15-min sustained (no decay/creep), concurrent, and 500k single all held,
+  thanks to the **pre-allocated KV pool** (workload fills GPU pool, not system RAM). Residual crash risk is the
+  baseline `gpu_memory_utilization=0.82` headroom (~15 GB) + the NVIDIA `mstflint`/NIC kernel bug (SETUP-NOTES §7).
