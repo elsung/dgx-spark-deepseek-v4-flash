@@ -44,7 +44,7 @@ slot count. See `dual-spark-vllm.md`. Profiles switch via `.env` (`MAX_MODEL_LEN
 | RTX PRO 6000 | 96 GB GDDR7 (~1.8 TB/s) | ds4.c | **46.9** | 344 | single only |
 | **Dual DGX Spark** | 2×128 GB, TP=2 | vLLM **FP8** | ~41 | **~1785** | **~350 agg** |
 | Mac Studio M2 Ultra | 192 GB (~800 GB/s) | ds4.c | 29.7 | 389 | single only |
-| Single DGX Spark | 128 GB (~273 GB/s) | ds4.c IQ2 | ~14 | — | single |
+| Single DGX Spark | 128 GB (~273 GB/s) | ds4.c IQ2 | ~14 | 410 | single |
 
 Single-stream decode tracks memory bandwidth (RTX PRO 6000 wins). But the dual Spark runs the full **FP8**
 (best quality), has **~5× the prefill throughput** (vLLM batched, ~1785 vs ~350), and does real

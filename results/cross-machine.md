@@ -9,7 +9,7 @@ median of iters; decode = completion_tokens/wall, prefill = prompt_tokens/wall o
 | **RTX PRO 6000** | 96 GB GDDR7 (~1.8 TB/s) | ds4.c | **46.9** | 344 | single-stream only¹ |
 | **Dual DGX Spark** | 2×128 GB unified, TP=2 (QSFP RoCE) | vLLM **FP8** | **~41** | **~1785** | **~350 t/s agg @ c=32** |
 | **Mac Studio M2 Ultra** | 192 GB unified (~800 GB/s) | ds4.c | **29.7** | 389 | single-stream only¹ |
-| **Single DGX Spark** | 128 GB unified (~273 GB/s) | ds4.c IQ2_XXS | ~14 | — | single-stream |
+| **Single DGX Spark** | 128 GB unified (~273 GB/s) | ds4.c IQ2_XXS | ~14 | 410 | single-stream |
 
 ¹ antirez ds4.c is single-stream (concurrent requests queue).
 

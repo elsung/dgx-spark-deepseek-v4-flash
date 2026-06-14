@@ -29,7 +29,7 @@ QSFP56** direct cable (RoCE / NCCL).
 | RTX PRO 6000 (96 GB GDDR7) | ds4.c | **46.9** | 344 | single-stream only |
 | **2× DGX Spark** | vLLM **FP8** | ~41 | **~1785** | **~350 agg @ c=32** |
 | Mac Studio M2 Ultra (192 GB) | ds4.c | 29.7 | 389 | single-stream only |
-| 1× DGX Spark | ds4.c IQ2_XXS | ~14 | — | single-stream |
+| 1× DGX Spark | ds4.c IQ2_XXS | ~14 | 410 | single-stream |
 
 Only the Sparks run the **full FP8** quality, have **~5× the prefill**, *and* do real multi-stream throughput
 — the ds4.c boxes are single-stream. → [`cross-machine.md`](results/cross-machine.md)
@@ -44,7 +44,8 @@ Dual-Spark FP8; switch profiles with one command:
 
 → [profile sweeps](results/dual-spark-vllm.md) · [ideal settings per use case](results/long-context.md)
 
-## 📏 Long context — what to expect (single-stream, any profile)
+## 📏 Long context — what to expect
+**2× DGX Spark · DeepSeek-V4-Flash official FP8 · vLLM TP=2** (single-stream; holds across profiles).
 | Context | TTFT (to first token) | prefill t/s | decode t/s |
 |--:|--:|--:|--:|
 | 8k | 4 s | ~1970 | 40 |
