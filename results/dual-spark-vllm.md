@@ -11,10 +11,16 @@ vLLM 0.21.1 (Aiden image), TP=2, MTP draft=2, fp8 KV, expert-parallel.
 
 ## Concurrency — two profiles (clean: ignore_eos, fixed-length gen)
 
-**Long-context profile (1M ctx, max_num_seqs=6)** — slot-limited:
+**"base" profile (1M ctx, max_num_seqs=6)** — interactive / long-context:
 | c | 1 | 2 | 4 | 6 | 8 | 12 |
 |---|--:|--:|--:|--:|--:|--:|
 | agg tok/s | 32 | 59 | 66 | **103** | 96 | 110 |
+| **per-request t/s** | **~32** | ~28 | ~17 | ~17 | ~12 | ~9 |
+
+The pair is **compute-bound (~350 t/s total)**, so per-request ≈ total ÷ active streams. **40+ tok/s per
+request is single-stream only** — you can't have both high per-request speed and high concurrency. `base`
+gives ~32–41/req for 1–2 users (with 1M context); use `batch` (256K/36) when you want raw aggregate.
+Note: the ~15 GB system-RAM headroom is fixed by `gpu_memory_utilization=0.82`, the same for every profile.
 
 **High-throughput, 32K ctx, max_num_seqs=36:**
 | c | 1 | 8 | 16 | 24 | 32 | 36 |
