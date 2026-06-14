@@ -1,0 +1,10 @@
+{"name": "Qwen3.5-9B-Q5KXL", "engine": "llama", "file": "Qwen3.5-9B-UD-Q5_K_XL.gguf", "base": {"pp512": 2337.0, "tg128": 33.6}}
+{"name": "Qwen3.5-9B-MTP", "engine": "llama", "file": "Qwen3.5-9B-UD-Q5_K_XL.gguf", "base": {"pp512": 2473.9, "tg128": 33.5}, "mtp": null}
+{"name": "Gemma4-12B-Q4KXL", "engine": "llama", "file": "gemma-4-12b-it-UD-Q4_K_XL.gguf", "base": {"pp512": 1951.0, "tg128": 27.8}}
+{"name": "Gemma4-26B-A4B-IQ4XS", "engine": "llama", "file": "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf", "base": {"pp512": 2916.8, "tg128": 60.3}}
+{"name": "Qwen3.6-27B-IQ4XS", "engine": "llama", "file": "Qwen3.6-27B-IQ4_XS.gguf", "base": {"pp512": 898.9, "tg128": 13.7}}
+{"name": "Gemma4-31B-Q3KS", "engine": "llama", "file": "gemma-4-31B-it-Q3_K_S.gguf", "base": {"pp512": 718.8, "tg128": 12.9}}
+{"name": "Qwen3.6-35B-A3B-Q4KM", "engine": "llama", "file": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf", "base": {"pp512": 2305.0, "tg128": 67.4}}
+{"name": "Gemma3-27B-QAT-Q4_0", "engine": "llama", "file": "gemma-3-27B-it-QAT-Q4_0.gguf", "base": {"pp512": 1030.6, "tg128": 13.8}}
+{"name": "MiniMax-172B-Q3KS", "engine": "llama", "file": "MiniMax-M2.7-REAP-172B-A10B-Q3_K_S.gguf", "base": {"pp512": 525.1, "tg128": 31.2}}
+{"name": "MiniMax-139B-Q3KM", "engine": "llama", "file": "MiniMax-M2.7-REAP-139B-Q3_K_M.gguf", "base": {"pp512": 558.2, "tg128": 26.5}}

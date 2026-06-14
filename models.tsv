@@ -1,0 +1,13 @@
+# DGX Spark GGUF benchmark suite. Filenames verified against HF 2026-06-13.
+# name	engine	hf_repo	srcfile	~GB	notes
+Qwen3.5-9B-Q5KXL	llama	unsloth/Qwen3.5-9B-GGUF	Qwen3.5-9B-UD-Q5_K_XL.gguf	6.7	+mmproj-F16; workhorse 9B dense vision
+Qwen3.5-9B-MTP	llama	unsloth/Qwen3.5-9B-MTP-GGUF	Qwen3.5-9B-UD-Q5_K_XL.gguf	6.9	native MTP head; A/B speedup
+Gemma4-12B-Q4KXL	llama	unsloth/gemma-4-12b-it-GGUF	gemma-4-12b-it-UD-Q4_K_XL.gguf	7.4	+mmproj-F16; needs --jinja
+Gemma4-26B-A4B-IQ4XS	ik	unsloth/gemma-4-26B-A4B-it-GGUF	gemma-4-26B-A4B-it-UD-IQ4_XS.gguf	13.6	MoE 4B-active; +mmproj +ik MTP (fastest capable on 16GB)
+Qwen3.6-27B-IQ4KS	ik	cHunter789/Qwen3.6-27B-i1-IQ4_KS-GGUF	Qwen3.6-27B.i1-IQ4_KS-attn_qkv-IQ4_KSS.gguf	14.1	ik-only IQ4_KS; dense VL hybrid; +mmproj from unsloth
+Gemma4-31B-Q3KS	ik	unsloth/gemma-4-31B-it-GGUF	gemma-4-31B-it-Q3_K_S.gguf	13.2	dense 31B; +ik MTP (2.3x on ref)
+Qwen3.6-35B-A3B-Q4KM	llama	unsloth/Qwen3.6-35B-A3B-GGUF	Qwen3.6-35B-A3B-UD-Q4_K_M.gguf	22.1	MoE; on GB10 runs FULL resident (no -ncmoe)
+Gemma3-27B-QAT-Q4_0	llama	lmstudio-community/gemma-3-27B-it-qat-GGUF	gemma-3-27B-it-QAT-Q4_0.gguf	15.6	dense 27B QAT; +mmproj
+MiniMax-172B-Q3KS	llama	exdysa/MiniMax-M2.7-REAP-172B-A10B-GGUF	MiniMax-M2.7-REAP-172B-A10B-Q3_K_S.gguf	74.5	big MoE — fits 128GB Spark, not a 16GB card
+MiniMax-139B-Q3KM	llama	dervig/m51Lab-MiniMax-M2.7-REAP-139B-A10B-GGUF	MiniMax-M2.7-REAP-139B-Q3_K_M.gguf	66.6	big MoE
+# Phase 2 (needs arm64 TRT-LLM/vLLM): nvidia/Nemotron-3-Nano-(Omni-)30B-A3B-NVFP4, MJPansa/MiniMax-...-W4A16
