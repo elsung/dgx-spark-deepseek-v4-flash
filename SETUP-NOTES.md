@@ -4,7 +4,7 @@ Hard-won lessons from standing up 2× DGX Spark (GB10, 128 GB unified, sm_121, a
 DeepSeek-V4-Flash. Read this before the next bring-up — most of these cost hours.
 
 ## Nodes
-- **e1f0** (head): user `justblaze1`, Tailscale `100.74.198.99`
+- **e1f0** (head): user `justblaze1`, Tailscale (head)
 - **378f** (worker): user `justblaze0`, `ssh justblaze0@spark-378f`
 - Both: driver 580.159.03, CUDA 13.0, Ubuntu 24.04.
 

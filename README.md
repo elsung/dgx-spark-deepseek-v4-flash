@@ -1,53 +1,82 @@
-# dgx-spark-llm-bench
+# DeepSeek-V4-Flash on DGX Spark — dual-node TP=2, single-node, and a cross-machine shootout
 
-LLM inference benchmarks on the **NVIDIA DGX Spark (GB10, sm_121, 128 GB LPDDR5X unified memory, arm64)**.
-Ports [@elsung](https://github.com/elsung)'s [blackwell-16gb-llm-starter](https://github.com/elsung/blackwell-16gb-llm-starter)
-and [blackwell-llm-toolkit](https://github.com/elsung/blackwell-llm-toolkit) (RTX 50-series 16 GB / RTX PRO 6000 96 GB, sm_120, x86)
-to the Spark. Intended to be pushed as a standalone DGX-Spark benchmark repo.
+Getting **DeepSeek-V4-Flash** running on the **NVIDIA DGX Spark (GB10)** — including the headline:
+the **official FP8 model across *two* Sparks via vLLM tensor-parallel (TP=2) over a QSFP56 RoCE link** —
+plus a single-Spark path (antirez `ds4`), a 10-model llama.cpp GGUF benchmark suite, and a cross-machine
+comparison (Mac Studio M2 Ultra, RTX PRO 6000). Written down with **all the gotchas that cost us hours**.
 
-## What's different on GB10 vs the reference cards
-- **128 GB unified memory** → every model is **fully GPU-resident (`-ngl 999`, no `-ncmoe` offload)**.
-  The big models that needed a 96 GB card (MiniMax-172B/139B, DeepSeek-V4-Flash) **fit here**, and the
-  16 GB-card MoE-offload penalty disappears — these numbers should beat the reference where offload was forced.
-- **sm_121** (not sm_120): all GGUF engines built from source with `-DCMAKE_CUDA_ARCHITECTURES=121`.
-- **arm64**: the toolkit's x86 NVFP4/W4A16 wheels (TRT-LLM / vLLM / LMCache) don't apply — those are
-  **Phase 2** (need arm64 builds). This repo is the **GGUF suite** (llama.cpp + ik_llama.cpp) for now.
+Builds on my earlier [blackwell-16gb-llm-starter](https://github.com/elsung/blackwell-16gb-llm-starter)
+and [blackwell-llm-toolkit](https://github.com/elsung/blackwell-llm-toolkit), ported to GB10 (sm_121, arm64).
 
-## Engines (built in ~/AI)
-- mainline `llama.cpp` (`~/AI/llama.cpp/build/bin`) — Q/UD/IQ4_XS quants, vision, mainline MTP
-- `ik_llama.cpp` (`~/AI/ik_llama.cpp/build/bin`) — IQ_K quants + Gemma-4 MTP assistants
+## Hardware
+2× **NVIDIA DGX Spark** (GB10, 128 GB LPDDR5X unified, sm_121, arm64, CUDA 13) joined by a single
+**200 G QSFP56** direct cable (RoCE / NCCL).
 
-## Model suite (GGUF) — `models.tsv`
-9B → 172B, spanning dense + MoE, the exact quants from the starter/toolkit benches plus the big MoEs the
-Spark uniquely fits. Weights land in `~/LLMs/models/gguf/` (flat symlinks like `Qwen3.6-27B-IQ4KS.gguf`).
+## 🏁 Headline results
+| Setup | Model / quant | single-stream | aggregate |
+|---|---|--:|--:|
+| **2× DGX Spark, TP=2 (vLLM)** | DeepSeek-V4-Flash **official FP8** | **~38–44 tok/s** | **~270 tok/s @ c=32** |
+| 1× DGX Spark (antirez ds4) | DeepSeek-V4-Flash IQ2_XXS | ~14 tok/s | — |
+| 1× DGX Spark (llama.cpp GGUF suite) | 9B → **172B** MoE | up to 67 (35B-A3B) | — |
 
-## Run
+**Cross-machine, same model (single-stream decode / prefill tok/s):** RTX PRO 6000 **46.9 / 344** ·
+Mac M2 Ultra **29.7 / 389** · dual Spark FP8 **~40** · single Spark IQ2 ~14. Only the Sparks run the
+**full FP8** quality *and* real **multi-stream throughput (~270 agg)** — the ds4.c boxes are single-stream.
+
+Full numbers: [`results/FINAL-BENCHMARKS.md`](results/FINAL-BENCHMARKS.md) ·
+[`cross-machine.md`](results/cross-machine.md) · [`dual-spark-vllm.md`](results/dual-spark-vllm.md) ·
+[`llamacpp-gb10.md`](results/llamacpp-gb10.md) · [`SUMMARY.md`](results/SUMMARY.md).
+
+### What the numbers say
+1. **Decode is memory-bandwidth bound** — small models run ~2.5–3.4× slower than a fat-GDDR card; the
+   Spark is a **capacity** machine, not a latency one.
+2. **Prefer MoE** — active/total params is the speed multiplier: a 35B MoE (67 t/s) beats a 27B dense
+   (13) by 5×; a **172B MoE runs at 31 t/s**.
+3. **The Spark's niche: frontier-size models on one or two boxes** — MiniMax-172B and DeepSeek-V4-Flash
+   don't fit a 16 GB (or even 96 GB) card; **two Sparks deliver the full FP8 V4-Flash at ~40 tok/s**.
+
+## ⚠️ Stability — open issue (help wanted, contributions welcome)
+While stress-testing **higher concurrency**, the head node hit a **kernel crash + spontaneous reboot.**
+Root cause (full forensics in [`SETUP-NOTES.md §7`](SETUP-NOTES.md)):
+- **Trigger:** `nvidia-dgx-telemetry` periodically runs **`mstflint`** to poll the ConnectX-7 firmware; one
+  poll **NULL-deref'd the kernel** in `pci_bus_read_config_dword` (with IRQs disabled) under heavy RoCE load
+  — a kernel/MST-driver bug.
+- **Wedge:** that Oops tainted the kernel, then **`kcompactd` (memory compaction) soft-locked a CPU for 48 s**
+  under memory pressure → RCU stall → hang.
+- **Red herring:** `mlx5 "insufficient power on the PCIe slot (27W)"` logs on *every* boot, both nodes — it's
+  a normal trait of the integrated CX-7 on a PCIe x4 link, **not** the cause.
+
+**Current mitigations** (don't lose capability): `vm.compaction_proactiveness=0` (persistent), drop page
+cache before big loads, keep memory headroom. **Sustained high-concurrency stability testing is still TODO** —
+and this looks like an NVIDIA firmware/driver bug worth a DGX support ticket. *If you've seen this on a Spark,
+let's compare notes.*
+
+## What's in here
+- [`results/`](results/) — every number (final summary, cross-machine, dual-Spark vLLM sweeps, GGUF suite)
+- [`SETUP-NOTES.md`](SETUP-NOTES.md) — **the gotchas**: HF Xet download hangs + watchdog; QSFP rightmost-port /
+  firewall / NetworkManager-wipes-IP; docker-group-without-relogin; ik_llama-on-arm64; **the kernel crash §7**
+- [`scripts/`](scripts/) — GB10-tuned serve presets, the concurrency bench, the download watchdog
+- `run-spark-bench.py` / `models.tsv` — the 10-model GGUF suite (filenames HF-verified)
+
+## Run it
 ```bash
-# unattended: waits for FP8 dl, pulls ds4, then downloads+benches every model
-nohup bash run-everything.sh > ~/LLMs/.spark-pipeline.log 2>&1 &
-
-# or just the benchmark suite (weights auto-download)
-python3 run-spark-bench.py
-
-# serve any model with GB10-tuned settings (OpenAI API :8080)
-./scripts/serve-gb10 gemma4-26b-mtp
-# concurrency probe (other terminal)
-./scripts/conc-probe.py --n 1 --n 2 --n 4 --max-tokens 300
+python3 run-spark-bench.py                      # download + bench the 10-model GGUF suite
+./scripts/serve-gb10 gemma4-26b-mtp             # serve a model, GB10-tuned (:8080)
+./scripts/conc-probe.py --n 1 --n 2 --n 4       # concurrency probe
 ```
+Dual-Spark vLLM recipe + launch: see [`SETUP-NOTES.md`](SETUP-NOTES.md) and the
+[MiaAI-Lab compose](https://github.com/MiaAI-Lab/DeepSeek-V4-Flash-Dual-DGX-Spark-1M-Context).
 
-## Results
-`results/llamacpp-gb10.md` (+ `.jsonl`) — pp512 (prefill) + tg128 (decode) single-stream, MTP A/B.
-Method mirrors the source repos: `llama-bench -ngl 999 -fa 1 -p 512 -n 128 -r 3`.
+## 🙏 Acknowledgments
+This stands entirely on others' work — see [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md). In short:
+**antirez** (the `ds4`/DwarfStar engine + GGUF weights), **Aiden** (`aidendle94`, the dual-Spark vLLM recipe
+& GB10 image), the **NVIDIA DGX Spark forum community** (the TP=2 recipe threads), **llama.cpp**, **vLLM**,
+**DeepSeek**, and the GGUF quant authors. More improvements are landing in these threads fast — we're
+watching and hope to **contribute back**.
 
-## Known limitations on GB10/arm64
-- **ik_llama.cpp does not build cleanly on aarch64** (`iqk_cpu_ops.cpp`: `v_expf`/`v_silu`/`ggml_half`
-  undeclared — the IQK kernels are x86/AVX-tuned). The ik-only `IQ4_KS` Qwen3.6-27B is substituted with the
-  mainline `IQ4_XS` of the same model; Gemma-4 26B/31B use their standard quants on mainline. ik ARM port = TODO.
-- **MTP/speculative speedup is a llama-server feature** — `llama-bench` can't measure it, so the suite reports
-  base pp512/tg128 only. MTP A/B is measured separately via `llama-server` + timed decode (see ds4: ~14 tok/s
-  with MTP draft=2 on one Spark). `results/mtp-gb10.md` TODO.
+## Status / roadmap
+- ✅ Dual-Spark FP8 TP=2 working; single-Spark ds4; 10-model GGUF suite; cross-machine comparison
+- ⏳ Higher-context (256K/500K) + sustained-concurrency **stability** validation
+- ⏳ Phase 2: TRT-LLM (NVFP4) + vLLM W4A16/LMCache on arm64; ik_llama aarch64 port; full MTP A/B
 
-## Phase 2 (TODO, needs arm64 builds)
-- vLLM (AWQ/W4A16) + LMCache, TRT-LLM (NVFP4 Nemotron) on GB10/arm64
-- `rapid_bench.py` 41-prompt quality eval + concurrency harness
-- DeepSeek-V4-Flash dual-Spark TP=2 numbers (see `~/AI/spark-vllm-ds4`)
+*Hardware/results from a personal 2× DGX Spark lab. PRs and other-machine numbers welcome.*
