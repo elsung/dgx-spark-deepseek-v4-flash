@@ -8,6 +8,11 @@ comparison (Mac Studio M2 Ultra, RTX PRO 6000). Written down with **all the gotc
 Builds on my earlier [blackwell-16gb-llm-starter](https://github.com/elsung/blackwell-16gb-llm-starter)
 and [blackwell-llm-toolkit](https://github.com/elsung/blackwell-llm-toolkit), ported to GB10 (sm_121, arm64).
 
+> **How this was made:** the runs, benchmarks, configs, gotchas, and write-ups in this repo are produced by
+> **AI agents (Claude Code)** that I ([@elsung](https://github.com/elsung)) direct — I drive the hardware,
+> set the goals, and push the models to do the benchmarking, tune the configs, and document the findings.
+> Numbers are real (measured on the hardware below); treat the prose as AI-authored and verify before relying on it.
+
 ## Hardware
 2× **NVIDIA DGX Spark** (GB10, 128 GB LPDDR5X unified, sm_121, arm64, CUDA 13) joined by a single
 **200 G QSFP56** direct cable (RoCE / NCCL).
