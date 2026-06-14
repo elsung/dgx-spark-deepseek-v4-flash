@@ -54,3 +54,7 @@ at depth. (TTFT is still real on every box — a 100k prompt is never instant.)
 free RAM stays ~11–15 GB regardless. So crash risk ≈ a *constant baseline* (the 0.82 reservation) + the
 `mstflint`/NIC kernel bug, **not** the workload. (500k at 36 slots *would* OOM — pool = ctx×slots = 18M
 tokens; 500k *single* on `base`'s 6M pool fits fine.)
+
+## Sustained / continuous (15 min, base 1M/6, gen=256, sequential)
+140 requests over 15 min: **decode stayed 39.6 → 40.2 t/s (no decay)**, **free RAM 11589 → 11576 MB
+(no creep)**, **0 new NVRM-OOM**, no crash. Continuous running does not degrade throughput or leak memory.
