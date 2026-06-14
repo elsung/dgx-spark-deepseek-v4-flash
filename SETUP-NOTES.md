@@ -52,3 +52,22 @@ hours. Burned ~12 h on this. Also: unauthenticated HF throttles hard after an in
 include is fixable (`-DCMAKE_CXX_FLAGS="-include cstdint"`); the SIMD helpers are not (without a port).
 Use mainline llama.cpp with standard quants instead. (mainline also needed `-DLLAMA_BUILD_UI=OFF`-ish:
 a UI asset downloaded empty → build it with prebuilt-UI disabled.)
+
+## 7. Kernel crash / spontaneous reboot (2026-06-13, e1f0 only)
+Symptom: e1f0 hard-hung and rebooted under heavy dual-Spark vLLM load; 378f (worker) was fine.
+Root cause (from `journalctl -k -b -1`):
+- **Trigger:** NVIDIA DGX telemetry (`nvidia-dgx-telemetry.service`) periodically runs **`mstflint`** to
+  poll the ConnectX-7 firmware. One poll **NULL-deref'd the kernel** in `pci_bus_read_config_dword`
+  (reading the NIC's PCI config) **with IRQs disabled** — a kernel/MST-driver bug, likely tickled while
+  the CX-7 was hammered by TP=2 RoCE traffic.
+- **Wedge:** that Oops tainted the kernel; then `kcompactd0` (memory compaction) **soft-locked a CPU for
+  48 s** under heavy memory pressure (149 GB model + ~470 GB of model files in page cache) → RCU stall → hang.
+- **Red herring:** `mlx5_core … insufficient power on the PCIe slot (27W)` logs on **every boot, both
+  nodes, all 4 NIC functions** — it's a normal trait of the integrated CX-7 on a PCIe x4 link, NOT the cause.
+Fixes:
+- It's largely an NVIDIA bug — **file a DGX support ticket** (BIOS 5.36_0ACUM018, driver 580.159.03,
+  kernel 6.17.0-1021-nvidia; mstflint NULL-deref + kcompactd soft-lockup) and check for firmware updates.
+- Reduce the memory-pressure wedge so a future Oops is survivable: `vm.compaction_proactiveness=0`
+  (stops the background daemon that locked up — on-demand compaction still works, no perf loss),
+  `drop_caches` after big downloads, and optionally lower vLLM `gpu_memory_utilization`.
+- High-context × high-concurrency profiles (e.g. 500K) raise memory pressure — apply the above + watch `free`.

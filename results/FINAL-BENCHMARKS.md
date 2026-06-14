@@ -36,6 +36,18 @@ Ranked by decode tok/s. **MoE dominates** a bandwidth-bound box.
 ~270 tok/s aggregate = ~7× single-stream; compute-bound (not memory — KV only ~7% used). See
 `dual-spark-vllm.md` for the full sweeps. Profile switchable via `.env` (`MAX_MODEL_LEN`/`MAX_NUM_SEQS`).
 
+## D) DeepSeek-V4-Flash across machines (single-stream, same model)
+| Machine | Hardware | Engine/quant | decode t/s | concurrency |
+|---|---|---|--:|---|
+| RTX PRO 6000 | 96 GB GDDR7 (~1.8 TB/s) | ds4.c | **46.9** | single only |
+| **Dual DGX Spark** | 2×128 GB, TP=2 | vLLM **FP8** | ~38–44 | **~270 agg** |
+| Mac Studio M2 Ultra | 192 GB (~800 GB/s) | ds4.c | 29.7 | single only |
+| Single DGX Spark | 128 GB (~273 GB/s) | ds4.c IQ2 | ~14 | single |
+
+Single-stream tracks memory bandwidth (RTX 6000 wins). But only the **dual Spark runs the full FP8**
+(best quality) and does real **multi-stream throughput (~270 agg)** — the ds4.c boxes are single-stream.
+Full breakdown in `cross-machine.md`.
+
 ## Takeaways
 1. **Decode is memory-bandwidth bound** — small dense models run ~2.5–3.4× slower than a 16 GB GDDR7
    card (9B: 33 vs 113 t/s). The Spark is a *capacity* machine, not a latency one.
