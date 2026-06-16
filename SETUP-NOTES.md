@@ -65,6 +65,12 @@ Root cause (from `journalctl -k -b -1`):
 - **Red herring:** `mlx5_core … insufficient power on the PCIe slot (27W)` logs on **every boot, both
   nodes, all 4 NIC functions** — it's a normal trait of the integrated CX-7 on a PCIe x4 link, NOT the cause.
 Fixes:
+- **ROOT memory-pressure source FIXED 2026-06-16:** it was a **vLLM prefix-cache memory leak**
+  ([PR #44237](https://github.com/vllm-project/vllm/pull/44237), *"linear host RSS growth under sustained load
+  with prefix caching"*) feeding the climb that wedged `kcompactd`. Upgrade to
+  `aidendle94/sparkrun-vllm-ds4-gb10:production-v2` — re-validated: 15-min sustained run, **container memory
+  flat (+4 MB)**, stable throughput, clean concurrent + long-context. The mstflint NULL-deref trigger is still
+  a latent NVIDIA bug — keep the ticket + mitigations below as defense-in-depth.
 - It's largely an NVIDIA bug — **file a DGX support ticket** (BIOS 5.36_0ACUM018, driver 580.159.03,
   kernel 6.17.0-1021-nvidia; mstflint NULL-deref + kcompactd soft-lockup) and check for firmware updates.
 - Reduce the memory-pressure wedge so a future Oops is survivable: `vm.compaction_proactiveness=0`
@@ -82,3 +88,29 @@ Diagnose: `for i in 0..5; do cat /sys/class/infiniband/<rocedev>/ports/1/gids/$i
 — find the index whose GID = `::ffff:<your-ipv4>` AND type = `RoCE v2`.
 Fix: made `NCCL_IB_GID_INDEX` env-driven per node (head=3, worker=4). A clean reboot rebuilds the GID table
 without the gap (then both = 3). Set per-node in each node's `.env`.
+
+## 9. Context vs concurrency: KV is ONE shared pool (and how it scales with nodes)
+`--max-model-len` (1M / 256K) is a per-request **ceiling**, NOT a reservation; `--max-num-seqs` (6 / 36) is the
+max batch width. The KV cache is a single fixed pool sized at boot from `gpu_memory_utilization` — measured
+`GPU KV cache size: 1,105,096 tokens` (2 Sparks, fp8 KV, util 0.82). It is **shared**:
+Σ(live tokens across all running requests) ≤ ~1.1M.
+- `base` 1M/6   → ~**1** full-1M request, or 6 concurrent averaging ≤184K each (vLLM: 1.1M ÷ 1.0M = 1.05×).
+- `batch` 256K/36 → ~**4** full-256K, or 36 averaging ≤30K (vLLM logs "Maximum concurrency for 262,144 … 4.22×").
+
+Contexts are **independent** (each request owns its KV blocks) — so this is a *memory* limit, not a design one;
+over-subscription **preempts/recomputes** (time-slices), it does NOT OOM on KV. Scale the pool by adding DGX
+nodes (the 149 GB of weights amortizes over more nodes → more KV room on every node; ~94 GiB/node for
+weights+KV, ~37 KB/token):
+
+> **pool(N) ≈ 28,300 tok/GiB × (94·N − 149) GiB**
+
+| nodes | 2 | 3 | 4 | 5 | 6 | 8 |
+|--|--|--|--|--|--|--|
+| KV pool | 1.1M | 3.8M | 6.4M | 9.1M | 11.8M | 17.1M |
+| 6-conc each | 184K | 628K | 1.07M | 1.52M | 1.96M | 2.85M |
+| 32-conc each | 35K | 118K | 201K | 284K | 367K | 534K |
+
+**4 Sparks → 6×~1M or 32×~200K. To get 256K on EACH of 32 → 5 Sparks. To get 1M on EACH of 6 → 4 Sparks.**
+First-order MEMORY estimate only (one sharded instance, weights counted once). Only TP=2 / 2-node is validated
+here — going wider needs pipeline-parallel + more RoCE links and hits compute/bandwidth (and 1M-prefill latency)
+walls before the memory wall. Full write-up: repo `results/dual-spark-vllm.md`.

@@ -38,6 +38,15 @@ Ranked by decode tok/s. **MoE dominates** a bandwidth-bound box.
 ~345 sustained. It's the memory edge (1 NVRM-OOM logged, recovered) — **500K/36 OOMs**; for >256K drop the
 slot count. See `dual-spark-vllm.md`. Profiles switch via `.env` (`MAX_MODEL_LEN`/`MAX_NUM_SEQS`).
 
+> **Context is a shared budget, not per-request.** The KV cache is **~1.1M tokens total**
+> (`GPU KV cache size: 1,105,096`), shared across all concurrent requests. So `1M / 6` holds about **one**
+> full-1M request (~~not 6 × 1M~~ = 6M), and `256K / 36` holds about **four** full-256K (vLLM logs
+> *"Maximum concurrency for 262,144 tokens per request: 4.22×"*) — the extra slots only fill when the
+> requests' combined length ≤ ~1.1M. Over-subscription preempts/recomputes; it doesn't OOM on KV.
+> Contexts are *independent* (own KV blocks), so it's a memory limit — adding nodes grows the pool
+> super-linearly: **4 Sparks → 6×~1M or 32×~200K; 5 Sparks → 32×256K each.** Table + math in
+> [`dual-spark-vllm.md`](dual-spark-vllm.md#scaling-the-kv-pool-with-more-dgx-spark-nodes).
+
 ## D) DeepSeek-V4-Flash across machines (same model)
 | Machine | Hardware | Engine/quant | decode t/s | prefill t/s | concurrency |
 |---|---|---|--:|--:|---|

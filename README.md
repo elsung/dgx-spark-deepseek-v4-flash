@@ -42,6 +42,18 @@ Dual-Spark FP8; switch profiles with one command:
 | `mytoolz dsv4-up batch` | 256K | ~41 t/s | **~350 @ c32** | many agents · batch · evals |
 | `mytoolz dsv4-up fast` | 32K | ~41 t/s | ~270 @ c32 | max throughput, short context |
 
+> **⚠️ "Context" is the per-request *max*, not what every stream gets at peak concurrency.** The KV cache is a
+> **shared ~1.1M-token pool** (`GPU KV cache size: 1,105,096`), split across all live requests — ~~6 concurrent
+> requests each at full 1M~~ would need 6M tokens of KV. Reality: `base` holds **~1** full-1M request (or 6
+> averaging ≤184K each); `batch` holds **~4** full-256K (vLLM: *"max concurrency … 4.22×"*) or 32 averaging
+> ≤30K. Long context and high concurrency trade off along that 1.1M line; over-subscription time-slices
+> (preempts), it doesn't OOM.
+>
+> **Contexts are independent, though** — each request has its own KV blocks, so this is a *memory* limit, not a
+> design one. Add DGX nodes and the pool grows **faster than linearly** (weights amortize over more nodes):
+> **4 Sparks → 6 × ~1M each** (or 32 × ~200K); **5 Sparks → 32 × 256K each**. Full table + math →
+> [dual-spark-vllm.md](results/dual-spark-vllm.md#scaling-the-kv-pool-with-more-dgx-spark-nodes).
+
 → [profile sweeps](results/dual-spark-vllm.md) · [ideal settings per use case](results/long-context.md)
 
 ## 📏 Long context — what to expect
@@ -65,13 +77,17 @@ creep**. *40+ t/s per request ⇒ single-stream only* (compute-bound ~350 t/s to
 - **The niche: frontier-size models on one or two boxes** — MiniMax-172B and full-FP8 V4-Flash don't fit a
   16 GB (or even 96 GB) card; **two Sparks deliver V4-Flash FP8 at ~40 tok/s single + ~350 aggregate**.
 
-## ⚠️ Stability (open issue — help wanted)
-Higher-concurrency stress once triggered a **kernel crash + reboot**: NVIDIA `dgx-telemetry` runs `mstflint`
-to poll the ConnectX-7, and a poll **NULL-deref'd the kernel** under RoCE load, compounded by a `kcompactd`
-memory-compaction soft-lockup. (The `mlx5 "insufficient power 27W"` log is a normal **red herring**.)
-Mitigations: `vm.compaction_proactiveness=0` (persistent), drop caches, memory headroom — after which 15-min
-sustained, concurrent, and 500k runs were all stable. **Likely an NVIDIA firmware/driver bug.** Full
-forensics → [`SETUP-NOTES.md §7`](SETUP-NOTES.md). *Seen it on your Spark? Let's compare notes.*
+## ✅ Stability (root cause fixed 2026-06-16)
+Higher-concurrency stress once triggered a **kernel crash + reboot**. Root cause: a **vLLM prefix-cache memory
+leak** ([PR #44237](https://github.com/vllm-project/vllm/pull/44237) — *"linear host RSS growth under sustained
+load with prefix caching"*). Host RAM climbed under sustained load until `kcompactd` (memory compaction)
+soft-locked a CPU, colliding with a latent NVIDIA `dgx-telemetry`/`mstflint` kernel NULL-deref under RoCE load.
+(The `mlx5 "insufficient power 27W"` log is a normal **red herring**.) **Fix: upgrade to the
+`aidendle94/sparkrun-vllm-ds4-gb10:production-v2` image** (PR #44237 baked in) — re-validated with a 15-min
+sustained run showing **container memory flat (+4 MB)** + stable throughput, plus clean concurrent and
+long-context passes. The `mstflint` trigger is still a latent NVIDIA bug — keep `vm.compaction_proactiveness=0`
++ memory headroom as defense-in-depth. Full forensics → [`SETUP-NOTES.md §7`](SETUP-NOTES.md).
+*Seen it on your Spark? Let's compare notes.*
 
 ## 📂 What's in the repo
 | Path | What |

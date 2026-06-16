@@ -21,8 +21,10 @@ Method: cache-free (unique fresh prompts, time-randomized salt). `bench-longctx.
 ## Stability note (important)
 NVRM `NV_ERR_NO_MEMORY` events rose **1 → 3** this boot during the long-context runs (system RAM ~11 GB
 free; `gpu_memory_utilization=0.82`). Long-context load stresses memory — the same pressure that fed the
-earlier kernel crash (SETUP-NOTES §7). **Sustained / concurrent big-context runs carry crash risk** and
-need the mitigations (compaction off, headroom) + monitoring.
+earlier kernel crash (SETUP-NOTES §7). ~~**Sustained / concurrent big-context runs carry crash risk**~~
+**Update (2026-06-16):** the workload trigger — a vLLM prefix-cache host-RSS leak — is **fixed in
+`production-v2`** (PR #44237); a 15-min sustained re-run held container memory flat (+4 MB). Keep the
+mitigations (compaction off, headroom) + monitoring as defense-in-depth for the latent `mstflint` NVIDIA bug.
 
 ## TODO (campaign in progress)
 - Concurrent long-context at the edge (`batch` 256K/36: N × ~200–250k).
@@ -49,11 +51,16 @@ at depth. (TTFT is still real on every box — a 100k prompt is never instant.)
 | concurrent 4 × 150k (`base`) | stable, completed | 12.0 GB | 0 | no |
 | 500k single-stream (`base`) | TTFT 351 s, prefill 1379, **decode 31.9** | 11.5 GB | 0 | no |
 
-**Key memory insight:** the KV pool is **pre-allocated** at startup (`gpu_memory_utilization=0.82` reserves
-~105 GB), so workload (concurrency / context depth) **fills the GPU pool but does NOT spike system RAM** —
-free RAM stays ~11–15 GB regardless. So crash risk ≈ a *constant baseline* (the 0.82 reservation) + the
-`mstflint`/NIC kernel bug, **not** the workload. (500k at 36 slots *would* OOM — pool = ctx×slots = 18M
-tokens; 500k *single* on `base`'s 6M pool fits fine.)
+**Key memory insight:** `gpu_memory_utilization=0.82` reserves the GPU budget at startup (~105 GB/node:
+weights + a **fixed ~1.1M-token KV pool** + overhead), so GPU memory is bounded up front and workload
+(concurrency / context depth) **fills that fixed pool but does NOT spike system RAM** — free RAM stays
+~11–15 GB. ~~So crash risk ≈ a constant baseline + the `mstflint`/NIC kernel bug, not the workload.~~
+**Correction (2026-06-16):** the crash *did* have a workload component — a vLLM prefix-cache **host-RSS leak**
+(PR #44237) that climbed under sustained load until `kcompactd` wedged; fixed in `production-v2` (SETUP-NOTES §7).
+~~500k at 36 slots would OOM — pool = ctx×slots = 18M tokens; 500k single on `base`'s 6M pool fits fine.~~
+**Correction:** the KV pool is **~1.1M tokens, fixed** (not `ctx×slots`). A 500k *single* request fits because
+500k < 1.1M; **500k × 36 OOMs** on non-KV per-seq overhead (+ pre-v2 the host leak), not on a "18M pool."
+See [`dual-spark-vllm.md`](dual-spark-vllm.md#scaling-the-kv-pool-with-more-dgx-spark-nodes).
 
 ## Sustained / continuous (15 min, base 1M/6, gen=256, sequential)
 140 requests over 15 min: **decode stayed 39.6 → 40.2 t/s (no decay)**, **free RAM 11589 → 11576 MB
@@ -79,5 +86,6 @@ would, but stability is already established; the pre-allocated pool means system
 - **Decode barely drops with depth** (~40 → ~32 at 500k) — long context slows *time-to-first-token*, not generation.
 - **Per-request 40+ tok/s ⇒ single-stream only** (compute-bound ~350 t/s total; per-req ≈ total ÷ active).
 - **Everything tested was stable** — 15-min sustained (no decay/creep), concurrent, and 500k single all held,
-  thanks to the **pre-allocated KV pool** (workload fills GPU pool, not system RAM). Residual crash risk is the
-  baseline `gpu_memory_utilization=0.82` headroom (~15 GB) + the NVIDIA `mstflint`/NIC kernel bug (SETUP-NOTES §7).
+  thanks to the **fixed ~1.1M-token KV pool** (workload fills the GPU pool, not system RAM) and, since
+  2026-06-16, the **`production-v2`** prefix-cache-leak fix (PR #44237). Residual crash risk is now just the
+  latent NVIDIA `mstflint`/NIC kernel bug (SETUP-NOTES §7) — mitigations stay as defense-in-depth.
